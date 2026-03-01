@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/mvdan.cc/gofumpt/format.svg)](https://pkg.go.dev/mvdan.cc/gofumpt/format)
 
-	go install mvdan.cc/gofumpt@latest
+	go install github.com/jessehersch/gofumpt@latest
 
 Enforce a stricter format than `gofmt`, while being backwards compatible.
 That is, `gofumpt` is happy with a subset of the formats that `gofmt` is happy with.
