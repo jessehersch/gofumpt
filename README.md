@@ -31,6 +31,60 @@ and the `-s` flag is hidden as it is always enabled.
 
 ### Added rules
 
+**Functions signatures with more than 3 params in them are split across multiple lines**
+
+<details><summary><i>Example</i></summary>
+
+```go
+func foo1(x int, y float64, z string, t time.Time) (int, float64, error) {
+	// code here...
+}
+
+func foo2(x int, y float64, z string) (int, float64, string, error) {
+	// code here...
+}
+
+func foo3(x int, y float64, z string, t time.Time) (int, float64, string, error) {
+	// code here...
+}
+```
+
+```go
+func foo1(
+	x int,
+	y float64,
+	z string,
+	t time.Time,
+) (int, float64, error) {
+	// code here...
+}
+
+func foo2(x int, y float64, z string) (
+	int,
+	float64,
+	string,
+	error,
+) {
+	// code here...
+}
+
+func foo3(
+	x int, 
+	y float64, 
+	z string, 
+	t time.Time,
+) (
+	int, 
+	float64, 
+	string, 
+	error,
+) {
+	// code here...
+}
+```
+
+</details>
+
 **No empty lines following an assignment operator**
 
 <details><summary><i>Example</i></summary>
