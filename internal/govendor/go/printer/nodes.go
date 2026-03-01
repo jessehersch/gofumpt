@@ -18,7 +18,94 @@ import (
 	"unicode/utf8"
 )
 
-const maxArgsInFunctionSignature = 3
+const (
+	// make this huge to turn off changes related to splitting up args across multiple lines
+	maxLineLength = 120
+)
+
+// shouldSplitAcrossLines says whether the list of
+// expressions should be split across lines or not.
+func shouldSplitAcrossLines(list []ast.Expr, mode exprListMode) bool {
+	if mode&commaTerm == 0 {
+		return false
+	}
+	// try to estimate what the line length would be.
+	// If it's short enough, let it through as one line.
+	length := 0
+	for _, x := range list {
+		length += estimateLength(x)
+	}
+	return length > maxLineLength
+}
+
+// shouldSplitFieldsAcrossLines is similar to shouldSplitAcrossLines but for field lists.
+func shouldSplitFieldsAcrossLines(list []*ast.Field) bool {
+	if list == nil {
+		return false
+	}
+	length := 0
+	for _, x := range list {
+		// +2 for the ", " that will appear if it's all on one line
+		length += estimateLength(x.Type) + 2
+		for _, name := range x.Names {
+			length += estimateLength(name)
+		}
+	}
+	// div by 2 here because this controls how long function signatures can get.
+	// When those get long, they are harder to understand. So
+	return length > maxLineLength/2
+}
+
+// estimateLength estimates the length of an expression in characters. It does not handle every single type
+// of expression. It handles enough to get a good estimate. it adds 2 to each estimate to account
+// for the ", " that would be added if it's in a list of args on one line
+func estimateLength(expr ast.Expr) int {
+	if expr == nil {
+		return 0
+	}
+	switch x := expr.(type) {
+	case *ast.BasicLit:
+		return len(x.Value) + 2
+	case *ast.Ident:
+		return len(x.Name) + 2
+	case *ast.UnaryExpr:
+		return estimateLength(x.X) + 2
+	case *ast.StarExpr:
+		return estimateLength(x.X) + 2
+	case *ast.ParenExpr:
+		return estimateLength(x.X) + 2
+	case *ast.SliceExpr:
+		return estimateLength(x.X) + 2
+	case *ast.ArrayType:
+		return estimateLength(x.Elt) + 2
+	case *ast.ChanType:
+		return estimateLength(x.Value) + 2
+	case *ast.SelectorExpr:
+		return len(x.Sel.Name) + estimateLength(x.X) + 2
+	case *ast.BinaryExpr:
+		return estimateLength(x.X) + estimateLength(x.Y) + 2
+	case *ast.IndexExpr:
+		return estimateLength(x.X) + estimateLength(x.Index) + 2
+	case *ast.MapType:
+		return estimateLength(x.Key) + estimateLength(x.Value) + 2
+	case *ast.KeyValueExpr:
+		return estimateLength(x.Key) + estimateLength(x.Value) + 2
+	case *ast.CallExpr:
+		sum := estimateLength(x.Fun)
+		for _, arg := range x.Args {
+			sum += estimateLength(arg) + 2
+		}
+		return sum
+	case *ast.CompositeLit:
+		sum := 0
+		for _, elt := range x.Elts {
+			sum += estimateLength(elt) + 2
+		}
+		return sum
+	default:
+		return 0
+	}
+}
 
 // Formatting issues:
 // - better comment formatting for /*-style comments at the end of a line (e.g. a declaration)
@@ -145,7 +232,8 @@ func (p *printer) exprList(prev0 token.Pos, list []ast.Expr, depth int, mode exp
 	line := p.lineFor(list[0].Pos())
 	endLine := p.lineFor(list[len(list)-1].End())
 
-	if prev.IsValid() && prev.Line == line && line == endLine {
+	eachOnSeparateLine := shouldSplitAcrossLines(list, mode)
+	if !eachOnSeparateLine && (prev.IsValid() && prev.Line == line && line == endLine) {
 		// all list entries on a single line
 		for i, x := range list {
 			if i > 0 {
@@ -238,16 +326,22 @@ func (p *printer) exprList(prev0 token.Pos, list []ast.Expr, depth int, mode exp
 		}
 
 		needsLinebreak := 0 < prevLine && prevLine < line
-		if i > 0 {
+		if i > 0 || eachOnSeparateLine {
 			// Use position of expression following the comma as
 			// comma position for correct comment placement, but
 			// only if the expression is on the same line.
 			if !needsLinebreak {
 				p.setPos(x.Pos())
 			}
-			p.print(token.COMMA)
 			needsBlank := true
-			if needsLinebreak {
+			if eachOnSeparateLine {
+				if i > prevBreak {
+					p.linebreak(line, 1, ws, useFF || prevBreak+1 < i)
+				}
+				ws = ignore
+				prevBreak = i
+				needsBlank = false
+			} else if needsLinebreak {
 				// Lines are broken using newlines so comments remain aligned
 				// unless useFF is set or there are multiple expressions on
 				// the same line in which case formfeed is used.
@@ -281,8 +375,26 @@ func (p *printer) exprList(prev0 token.Pos, list []ast.Expr, depth int, mode exp
 			p.setPos(pair.Colon)
 			p.print(token.COLON, vtab)
 			p.expr(pair.Value)
+			if !eachOnSeparateLine && i != len(list)-1 {
+				p.print(token.COMMA)
+			}
+			if eachOnSeparateLine {
+				p.print(token.COMMA)
+				if i == len(list)-1 {
+					p.print(newline)
+				}
+			}
 		} else {
 			p.expr0(x, depth)
+			if !eachOnSeparateLine && i != len(list)-1 {
+				p.print(token.COMMA)
+			}
+			if eachOnSeparateLine {
+				p.print(token.COMMA)
+				if i == len(list)-1 {
+					p.print(newline)
+				}
+			}
 		}
 
 		if size > 0 {
@@ -294,8 +406,10 @@ func (p *printer) exprList(prev0 token.Pos, list []ast.Expr, depth int, mode exp
 	}
 
 	if mode&commaTerm != 0 && next.IsValid() && p.pos.Line < next.Line {
-		// Print a terminating comma if the next token is on a new line.
-		p.print(token.COMMA)
+		if !eachOnSeparateLine {
+			// Print a terminating comma if the next token is on a new line.
+			p.print(token.COMMA)
+		}
 		if isIncomplete {
 			p.print(newline)
 			p.print("// " + filteredMsg)
@@ -304,7 +418,9 @@ func (p *printer) exprList(prev0 token.Pos, list []ast.Expr, depth int, mode exp
 			// unindent if we indented
 			p.print(unindent)
 		}
-		p.print(formfeed) // terminating comma needs a line break to look good
+		if !eachOnSeparateLine {
+			p.print(formfeed) // terminating comma needs a line break to look good
+		}
 		return
 	}
 
@@ -332,7 +448,7 @@ func (p *printer) parameters(fields *ast.FieldList, mode paramMode) {
 	if mode != funcParam {
 		openTok, closeTok = token.LBRACK, token.RBRACK
 	}
-	eachArgOnNewLine := len(fields.List) > maxArgsInFunctionSignature
+	eachArgOnNewLine := shouldSplitFieldsAcrossLines(fields.List)
 	p.setPos(fields.Opening)
 	p.print(openTok)
 	if len(fields.List) > 0 {
