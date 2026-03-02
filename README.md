@@ -1,3 +1,9 @@
+# NOTE
+
+> [!IMPORTANT]
+> Don't use this. I hacked it together before I realized [golines](https://github.com/golangci/golines) existed!
+> golines is a better solution to the problem of function calls and signatures that are too long! I may just delete this fork entirely!
+
 # gofumpt
 
 [![Go Reference](https://pkg.go.dev/badge/mvdan.cc/gofumpt/format.svg)](https://pkg.go.dev/mvdan.cc/gofumpt/format)
