@@ -34,6 +34,7 @@ and the `-s` flag is hidden as it is always enabled.
 **Functions signatures that are too long are split across multiple lines**
 
 <details><summary><i>Example</i></summary>
+
 ```go
 func foo1(x int, y float64, z string, t time.Time) (int, float64, error) {
 	// code here...
@@ -81,11 +82,13 @@ func foo3(
 	// code here...
 }
 ```
+
 </details>
 
 **Functions calls that are too long are split across multiple lines**
 
 <details><summary><i>Example</i></summary>
+
 ```go
 someFunc(x,y,z,w,u,"asdf","xxxx","yyyy",[]string{"this is too long","this is too long","this is too long","this is too long",
     "this is too long","this is too long","this is too long","this is too long"},
@@ -116,6 +119,7 @@ someFunc(
     map[string]int{"aaa": 10, "bbb": 10, "ccc": 10, "ddd": 10},
 )
 ```
+
 </details>
 
 **No empty lines following an assignment operator**
